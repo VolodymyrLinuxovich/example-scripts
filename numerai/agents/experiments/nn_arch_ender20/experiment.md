@@ -90,3 +90,24 @@ loss at 6 epochs, dropout 0.3 at 8 epochs, and a 3-seed average (also measures s
 ## Round 4: untested dimensions
 One change each from the leader: learning rate 5e-4 and 2e-3, 8 eras per batch, depth
 (512→256→128), input dropout 0.1.
+
+| model | change | corr | bmc | bmc_last_200 | corr_with_bench |
+|---|---|---|---|---|---|
+| r4_lr2e3 | lr 2e-3 (was 1e-3) | 0.0237 | 0.0084 | **0.0089** | 0.303 |
+| r2_corr_ep8 | leader (round 2) | 0.0253 | 0.0083 | 0.0085 | 0.340 |
+| r4_indrop01 | input dropout 0.1 | 0.0263 | 0.0079 | 0.0083 | 0.368 |
+| r4_epb8 | 8 eras per batch | 0.0250 | 0.0072 | 0.0078 | 0.362 |
+| r4_deep | 512→256→128 | 0.0241 | 0.0076 | 0.0077 | 0.320 |
+| r4_lr5e4 | lr 5e-4 | 0.0252 | 0.0068 | 0.0070 | 0.371 |
+
+**Findings**
+- lr 2e-3 is a small new best (+0.0004, about 2× seed noise); to confirm with seed averaging.
+- One pattern explains every result so far: BMC tracks how much training the model gets
+  (epochs, learning rate, batch size). More training lowers correlation with the benchmark;
+  BMC peaks just before raw corr starts to fall. Lower lr and bigger batches under-train.
+- Extra capacity (depth, width, residual blocks, TabM, embeddings) never beat 256→128.
+- Input dropout gives the highest raw corr so far but pulls predictions toward the benchmark.
+
+## Round 5: confirm and map the lr 2e-3 region
+3-seed average at lr 2e-3; lr 3e-3; lr 2e-3 at 6 and 10 epochs; wide network + correlation loss
+at lr 2e-3, 6 epochs.
