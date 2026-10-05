@@ -23,23 +23,22 @@
 \maketitle
 
 \begin{abstract}
-We search for the neural network that best predicts Numerai's 20-day Ender target, judging
-models not by raw correlation but by benchmark model contribution (\bmc{}): the signal a model
-adds beyond Numerai's own LightGBM benchmark. Across 35 cross-validated runs in six rounds we
-compare plain, wide, deep and residual multilayer perceptrons (MLPs), a TabM-style
-BatchEnsemble, learned per-bin feature embeddings, two loss functions and the main training
-hyperparameters. The best model is a plain three-layer MLP (1024--512--256) trained with a
-per-era Pearson-correlation loss for a short time. Averaged over three seeds it reaches
-\bmc{}~0.0089 over the last 200 out-of-fold eras, $2.1\times$ a LightGBM baseline trained on
-the same data. Architecture mattered far less than one variable: the amount of training.
-Training moves predictions steadily away from the benchmark, raising \bmc{}, until it starts
-to destroy raw signal; every knob we varied (epochs, learning rate, batch size, dropout) lands
-on this single curve. On 613 eras never used during the search, the result transfers exactly once the
-training amount is held fixed in optimizer steps rather than epochs: the 6-epoch recipe
-over-trains on twice the data (\bmc{}~0.0056), while 3~epochs, the same number of steps,
-reproduces the scout correlation and reaches \bmc{}~0.0095. This matches the continuous-time
-view of early stopping as ridge regularization. Scored on the 60-day target that Numerai now
-pays on, the network's contribution is about $30\times$ that of the LightGBM baseline.
+We search for the neural network that best predicts Numerai's Ender target (in v5.3 data,
+the 60-day horizon that Numerai pays on), judging models not by raw correlation but by
+benchmark model contribution (\bmc{}): the signal a model adds beyond Numerai's own LightGBM
+benchmark. Across 50 cross-validated runs in eight rounds we compare plain, wide, deep and
+residual multilayer perceptrons (MLPs), a TabM-style BatchEnsemble, learned per-bin feature
+embeddings, four loss functions and the main training hyperparameters. Architecture mattered
+far less than one variable: the amount of training. Training moves predictions steadily away
+from the benchmark, raising \bmc{}, until it starts to destroy raw signal, and every knob we
+varied (epochs, learning rate, batch size, dropout, weight interpolation) lands on this single
+curve. The optimum is a fixed number of optimizer steps rather than epochs: on 613 eras never
+used during the search, the step-matched model reproduces the search-time correlation while
+the epoch-matched one over-trains. Adding a penalty on each era's correlation with the
+benchmark raises \bmc{} by a further 21\% on those unseen eras. The final model, a plain
+1024--512--256 MLP trained with a per-era correlation loss and this penalty, reaches
+\bmc{}~0.0085 against the 60-day benchmark over the last 200 unseen eras, where a LightGBM
+baseline trained on the same data contributes almost nothing.
 \end{abstract}
 
 \section{Introduction}
@@ -67,6 +66,8 @@ Our contributions are:
         trade-off has a single interior optimum shared by all training knobs.
   \item A confirmation on disjoint data showing that the optimum is a fixed number of
         optimizer steps, so the epoch count must shrink as the training set grows.
+  \item A benchmark-penalized correlation loss that raises \bmc{} by about a fifth on unseen
+        eras, using the benchmark's honest out-of-sample predictions only during training.
 \end{enumerate}
 
 \section{Related work}
@@ -125,7 +126,11 @@ related tools that do not fit dense, low-cardinality features.
 \section{Experimental setup}
 
 \paragraph{Data.} Numerai v5.3, \texttt{medium} feature set (780 features, each an integer bin
-$0$--$4$), target \path{target_ender_20}. Because experiments ran on a 16\,GB laptop, the
+$0$--$4$), target column \path{target}. In v5.3 this column is identical to
+\path{target_ender_60} on every row (it matches \path{target_ender_20} on only 47\%), following
+Numerai's switch to 60-day scoring in round 1343 \citep{numerai_scoring}. We trained on it
+throughout; we initially took it for the 20-day target, a mistake that affected only the choice
+of benchmark during the search (see Metrics). Because experiments ran on a 16\,GB laptop, the
 search used every fourth era of the training and validation data (307 eras, 1.7M rows;
 \emph{scout data}). The confirmation step used every second era at offset one (613 eras, 3.4M
 rows; \emph{scale data}), which shares no eras with the scout data.
@@ -135,9 +140,13 @@ fold has no training data, so out-of-fold (OOF) predictions cover the last four 
 network trains for a fixed number of epochs; there is no early stopping, so no validation
 information leaks into OOF scores.
 
-\paragraph{Metrics.} The primary metric is mean \bmc{} over the last 200 OOF eras against the
-official \path{v53_lgbm_ender20} predictions. We also report \bmc{} over all OOF eras, raw
-per-era correlation (corr), and the mean correlation between a model's predictions and the
+\paragraph{Metrics.} The primary metric is mean \bmc{} over the last 200 OOF eras. During the
+architecture search (rounds 1--6) it was computed against the official
+\path{v53_lgbm_ender20} predictions; once we found that the target is the 60-day Ender, every
+saved prediction was re-scored against \path{v53_lgbm_ender60}, the benchmark that matches the
+target, and rounds 7--8 and the final model use that metric. The ranking of the search
+finalists is the same under both (\S\ref{sec:payout}). We also report \bmc{} over all OOF eras,
+raw per-era correlation (corr), and the mean correlation between a model's predictions and the
 benchmark's.
 
 \paragraph{Models.} All networks share one PyTorch implementation trained on Apple-silicon GPUs.
@@ -183,7 +192,7 @@ TabM BatchEnsemble ($k=8$) & 0.0213 & 0.0026 & 0.0026 & 0.393 \\
 MLP with per-bin embeddings & 0.0157 & 0.0012 & 0.0006 & 0.312 \\
 \bottomrule
 \end{tabular}
-\caption{Round-1 architecture scout on scout data, single seeds.}
+\caption{Round-1 architecture scout on scout data, single seeds; \bmc{} against the ender20 benchmark (search metric).}
 \label{tab:arch}
 \end{table}
 
@@ -253,7 +262,7 @@ Narrow 256--128, corr loss, lr 1e-3, 8 ep. & 0.0261 & 0.0082 & 0.0083 & 0.68 & 0
 Rank average of wide and narrow & 0.0263 & 0.0087 & 0.0088 & 0.71 & -- \\
 \bottomrule
 \end{tabular}
-\caption{Seed-averaged finalists on scout data.}
+\caption{Seed-averaged finalists on scout data; \bmc{} against the ender20 benchmark (search metric).}
 \label{tab:final}
 \end{table}
 
@@ -289,19 +298,19 @@ unseen eras.}
 \label{fig:steps}
 \end{figure}
 
-\subsection{The payout target}
+\subsection{Scoring against the matching benchmark}
+\label{sec:payout}
 
-Since round 1343 Numerai pays on the 60-day Ender target \citep{numerai_scoring}. Re-scoring the
-saved out-of-fold predictions against \path{target_ender_60} and the
-\path{v53_lgbm_ender60} benchmark preserves the ranking and widens the gap
+Re-scoring the saved out-of-fold predictions against the 60-day benchmark
+\path{v53_lgbm_ender60}, which matches the target, preserves the ranking and widens the gap
 (Table~\ref{tab:ender60}): the LightGBM baseline adds almost nothing beyond the 60-day
-benchmark, while the network trained only on the 20-day target still contributes 0.0064.
+benchmark, while the wide correlation-loss network still contributes 0.0064.
 
 \begin{table}[t]
 \centering\small
 \begin{tabular}{lcccc}
 \toprule
-Model (scout data, scored on ender60) & corr & \bmc{} & \bmc{} last 200 & corr w/ benchmark \\
+Model (scout data) & corr & \bmc{} & \bmc{} last 200 & corr w/ benchmark \\
 \midrule
 Wide MLP, corr loss, 3 seeds & 0.0260 & 0.0068 & \textbf{0.0064} & 0.357 \\
 Narrow MLP, corr loss, lr 2e-3, 3 seeds & 0.0262 & 0.0065 & 0.0061 & 0.374 \\
@@ -312,7 +321,7 @@ LightGBM baseline & 0.0277 & 0.0010 & 0.0002 & 0.518 \\
 \bottomrule
 \end{tabular}
 \caption{Out-of-fold predictions re-scored on the 60-day payout target against the 60-day
-LightGBM benchmark. Models were trained on the 20-day target.}
+LightGBM benchmark. All models were trained on \texttt{target} ($=$ \texttt{target\_ender\_60}).}
 \label{tab:ender60}
 \end{table}
 
@@ -331,10 +340,78 @@ Narrow, 6 epochs (2.0$\times$ steps) & 0.0220 & 0.0068 & 0.0067 & 0.308 \\
 Wide, MSE, 8 epochs & 0.0164 & 0.0049 & 0.0027 & 0.233 \\
 \bottomrule
 \end{tabular}
-\caption{Confirmation on 613 eras disjoint from the search. The last 200 eras of the scale
+\caption{Confirmation on 613 eras disjoint from the search; \bmc{} against the ender20 benchmark (search metric). The last 200 eras of the scale
 data are more recent than those of the scout data, so absolute levels are not directly
 comparable.}
 \label{tab:scale}
+\end{table}
+
+\subsection{Penalizing the benchmark}
+
+The training-amount curve suggests a direct route to uniqueness: tell the network what the
+benchmark already knows. Because the benchmark's predictions on training eras are honest
+out-of-sample forecasts (their per-era correlation with the target is 0.044 on training eras
+and 0.048 on validation eras), they can be used in the loss without leakage. We add a penalty
+on each era's squared correlation with the benchmark,
+\begin{equation}
+  \mathcal{L} = \mathcal{L}_{\text{corr}} + \lambda\,\frac{1}{|E|}\sum_{e\in E}
+  \operatorname{corr}(\hat y_e, b_e)^2,
+\end{equation}
+where $b_e$ is the benchmark's prediction; the benchmark is never an input to the network.
+Table~\ref{tab:penalty} shows that the penalty raises \bmc{} by 23\% on scout data and 21\% on the
+unseen scale eras, at the cost of raw correlation. Penalizing the benchmark the model is scored
+against works slightly better than penalizing the 20-day one, and $\lambda=1$ buys no more
+\bmc{} than $\lambda=0.3$ while losing raw signal. Directly maximizing \bmc{} (correlation of the
+prediction after removing its benchmark component within each era) helped little: the network
+remained free to stay close to the benchmark (correlation 0.31). Weight interpolation towards
+the initialization, $\theta_0 + \alpha(\theta_T-\theta_0)$ \citep{ali2019continuous}, behaved
+exactly like the amount of training ($\alpha=0.8$ under-trains, $\alpha=1.2$ slightly
+over-trains) and added little beyond it.
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{p{6.2cm}cccc}
+\toprule
+Model (3 seeds, \bmc{} vs.\ ender60 benchmark) & corr & \bmc{} & last 200 & w/ bench. \\
+\midrule
+\emph{Scout data} & & & & \\
+Wide MLP, corr loss, no penalty & 0.0260 & 0.0068 & 0.0064 & 0.357 \\
++ penalty vs.\ ender60 benchmark, $\lambda=0.3$ & 0.0215 & \textbf{0.0081} & 0.0079 & 0.249 \\
++ penalty vs.\ ender60 benchmark, $\lambda=1$ & 0.0184 & \textbf{0.0081} & \textbf{0.0080} & 0.191 \\
++ penalty vs.\ ender20 benchmark, $\lambda=0.3$ & 0.0220 & 0.0077 & 0.0075 & 0.265 \\
+\midrule
+\emph{Scale data (613 unseen eras, step-matched)} & & & & \\
+Wide MLP, corr loss, no penalty & 0.0262 & 0.0063 & 0.0070 & 0.384 \\
++ penalty vs.\ ender60 benchmark, $\lambda=0.3$ & 0.0208 & \textbf{0.0074} & \textbf{0.0085} & 0.255 \\
+\bottomrule
+\end{tabular}
+\caption{Benchmark penalty, three-seed averages.}
+\label{tab:penalty}
+\end{table}
+
+\paragraph{Blending trades contribution for correlation.} Because uniqueness costs raw
+correlation, we also tested rank-averaging the penalized network with a tree model
+(Table~\ref{tab:blend}). Numerai passes the benchmark's live predictions to uploaded models, so
+the benchmark itself is a free blending partner. A 25\% blend raises correlation by 62\% and its
+Sharpe ratio from 1.41 to 2.23 for a 19\% loss of \bmc{}; which side of this trade to take
+depends on how a participant weights correlation against contribution.
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+Blend partner (scout data) & weight & corr & corr Sharpe & \bmc{} last 200 \\
+\midrule
+None (penalized network) & 0 & 0.0215 & 1.41 & \textbf{0.0079} \\
+Official benchmark & 0.25 & 0.0348 & 2.23 & 0.0064 \\
+Official benchmark & 0.50 & 0.0432 & 2.53 & 0.0043 \\
+LightGBM baseline & 0.25 & 0.0268 & 1.74 & 0.0066 \\
+LightGBM baseline & 0.50 & 0.0293 & 1.85 & 0.0047 \\
+\bottomrule
+\end{tabular}
+\caption{Rank-average blends of the penalized network with a tree model; \bmc{} against the
+ender60 benchmark.}
+\label{tab:blend}
 \end{table}
 
 \section{Discussion}
@@ -356,27 +433,24 @@ first, in optimizer steps, and pick the \bmc{} peak before adding architecture. 
 training set grows, scale the epoch count down so the number of steps stays at the optimum.
 
 \paragraph{Limitations.} We used the \texttt{medium} feature set only; the 3,555-feature set did
-not fit in memory. Since Numerai's round 1343 the official \bmc{} uses the 60-day Ender target
-and a stake-weighted ensemble of benchmark models \citep{numerai_scoring}. We re-scored on the
-60-day target against the single 60-day LightGBM benchmark, but not against the stake-weighted
-ensemble. Finalists were averaged over three
-seeds, so differences below about 0.0003 should be read as ties. Thirty-five configurations
+not fit in memory. The official \bmc{} uses a stake-weighted ensemble of benchmark models
+\citep{numerai_scoring}; we scored against the single 60-day LightGBM benchmark. Finalists were averaged over three
+seeds, so differences below about 0.0003 should be read as ties. Fifty configurations
 were tried on the same folds; a deflated Sharpe ratio \citep{bailey2014deflated} would temper
 the best scout result, which is one reason we confirmed on disjoint eras. No live-tournament
 results are included yet.
 
 \section{Conclusion}
 
-On Numerai's 20-day Ender target the best neural network is not an exotic one. A plain
-three-layer MLP with a per-era correlation loss, trained briefly, doubles the LightGBM
-baseline's benchmark contribution. Architecture mattered less than the amount of training,
-which trades raw signal for uniqueness along a single curve. That amount is a fixed number of
-optimizer steps: holding it fixed transferred the optimum to unseen eras, and the advantage
-over LightGBM grows on the 60-day payout target. Next steps follow directly from the literature: interpolating trained weights
-towards their initialization as a continuous training-amount dial \citep{ali2019continuous},
-penalizing correlation with the benchmark during training, training on the 60-day target that
-Numerai now pays on, and a quasi-Monte Carlo search over the learning-rate and step-count
-interaction \citep{bousquet2017critical}.
+On Numerai's Ender target the best neural network is not an exotic one. A plain three-layer
+MLP with a per-era correlation loss, trained briefly and told what the benchmark already knows,
+contributes signal that a LightGBM model trained on the same data does not. Architecture
+mattered less than the amount of training, which trades raw signal for uniqueness along a single
+curve. That amount is a fixed number of optimizer steps: holding it fixed transferred the
+optimum to unseen eras. Next steps follow from the literature: a quasi-Monte Carlo search over
+the learning-rate, step-count and penalty interaction \citep{bousquet2017critical}, auxiliary
+targets as extra heads \citep{forum_new_targets}, partial feature neutralization
+\citep{forum_neutralization_bias}, and the full 3,555-feature set.
 
 \paragraph{Reproducibility.} Code, configurations, figures and this paper are in
 \url{https://github.com/VolodymyrLinuxovich/example-scripts}, branch \path{nn-arch-ender20},

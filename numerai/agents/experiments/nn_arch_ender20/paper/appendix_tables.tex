@@ -75,7 +75,18 @@ Run & Configuration & corr & \bmc{} & last 200 & w/ bench. \\\midrule
 Run & Configuration & corr & \bmc{} & last 200 & w/ bench. \\\midrule
 \path{r7_bench_pen1} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0188 & 0.0103 & \textbf{0.0106} & 0.157 \\
 \path{r7_bench_pen03} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0216 & 0.0102 & 0.0104 & 0.217 \\
+\path{r7_interp12} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0246 & 0.0094 & 0.0094 & 0.292 \\
 \path{r7_bmc_loss} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0248 & 0.0090 & 0.0090 & 0.307 \\
+\path{r7_interp08} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0262 & 0.0076 & 0.0076 & 0.367 \\
+\path{r7_ender60} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0256 & 0.0069 & 0.0063 & 0.346 \\
+\bottomrule\end{tabular}\end{center}
+
+\subsection*{Round 8 $\cdot$ confirmation}
+\begin{center}\scriptsize\begin{tabular}{p{3.2cm}p{6.0cm}cccc}\toprule
+Run & Configuration & corr & \bmc{} & last 200 & w/ bench. \\\midrule
+\path{r8_pen1_b60_seeds3} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 $\cdot$ 3 seeds & 0.0184 & 0.0081 & \textbf{0.0080} & 0.191 \\
+\path{r8_pen03_b60_seeds3} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 $\cdot$ 3 seeds & 0.0215 & 0.0081 & 0.0079 & 0.249 \\
+\path{r8_pen03_b20_seeds3} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 $\cdot$ 3 seeds & 0.0220 & 0.0077 & 0.0075 & 0.265 \\
 \bottomrule\end{tabular}\end{center}
 
 \subsection*{Scale $\cdot$ unseen eras}
@@ -86,4 +97,10 @@ Run & Configuration & corr & \bmc{} & last 200 & w/ bench. \\\midrule
 \path{s1_narrow_ep6_seeds3} & MLP 256--128 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ 3 seeds & 0.0220 & 0.0068 & 0.0067 & 0.308 \\
 \path{s1_wide_ep6_seeds3} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 $\cdot$ 3 seeds & 0.0206 & 0.0065 & 0.0056 & 0.283 \\
 \path{s1_wide_mse_ep8} & MLP 1024--512--256 $\cdot$ MSE $\cdot$ 8 ep $\cdot$ lr 0.001 $\cdot$ drop 0.2 & 0.0164 & 0.0049 & 0.0027 & 0.233 \\
+\bottomrule\end{tabular}\end{center}
+
+\subsection*{s2}
+\begin{center}\scriptsize\begin{tabular}{p{3.2cm}p{6.0cm}cccc}\toprule
+Run & Configuration & corr & \bmc{} & last 200 & w/ bench. \\\midrule
+\path{s2_pen03_b60_ep3_seeds3} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 3 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 $\cdot$ 3 seeds & 0.0208 & 0.0074 & \textbf{0.0085} & 0.255 \\
 \bottomrule\end{tabular}\end{center}
