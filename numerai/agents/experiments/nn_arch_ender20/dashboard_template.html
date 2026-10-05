@@ -1,0 +1,251 @@
+<title>Ender20 NN Search</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,650&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: lab-notebook dashboard. Summary strip, then charts in a 2-up grid, then the run ledger and sources. */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #121722; --ink-2: #4a5263; --ink-3: #7a8294;
+  --rule: #e2e5eb; --grid: #eceef2; --accent: #2a78d6;
+  --mse: #2a78d6; --corr: #eb6834; --lgbm: #8d929c;
+  --good-bg: #e3f3e6; --good-ink: #1d6b2c; --warn-bg: #fdf0d9; --warn-ink: #8a5a00;
+  --f-display: "Literata", Georgia, "Times New Roman", serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151b; --panel: #1a1e26; --ink: #eef0f4; --ink-2: #b4bac6; --ink-3: #868d9b;
+  --rule: #2b313c; --grid: #262b35; --accent: #3987e5;
+  --mse: #3987e5; --corr: #d95926; --lgbm: #8d929c;
+  --good-bg: #183322; --good-ink: #8fd6a0; --warn-bg: #3a2d12; --warn-ink: #f0c46b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1a1e26; --ink: #eef0f4; --ink-2: #b4bac6; --ink-3: #868d9b;
+  --rule: #2b313c; --grid: #262b35; --accent: #3987e5;
+  --mse: #3987e5; --corr: #d95926; --lgbm: #8d929c;
+  --good-bg: #183322; --good-ink: #8fd6a0; --warn-bg: #3a2d12; --warn-ink: #f0c46b; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; display: grid; gap: 28px }
+header { display: grid; gap: 6px }
+.eyebrow { font: 500 12px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3) }
+h1 { font: 650 clamp(26px, 4vw, 38px)/1.15 var(--f-display); margin: 0; text-wrap: balance }
+h2 { font: 650 20px/1.25 var(--f-display); margin: 0; text-wrap: balance }
+.lede { color: var(--ink-2); max-width: 70ch; margin: 0 }
+.meta { font: 13px/1.4 var(--f-mono); color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 6px 18px }
+a { color: var(--accent) }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px }
+.kpi { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; display: grid; gap: 4px }
+.kpi .label { font-size: 13px; color: var(--ink-2) }
+.kpi .value { font: 500 28px/1.1 var(--f-mono); font-variant-numeric: tabular-nums }
+.kpi .sub { font-size: 12.5px; color: var(--ink-3) }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 20px; display: grid; gap: 12px; min-width: 0 }
+.panel p { margin: 0; color: var(--ink-2); max-width: 75ch }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px }
+.chart { position: relative; height: 320px; min-width: 0 }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2) }
+.legend span { display: inline-flex; align-items: center; gap: 6px }
+.sw { width: 10px; height: 10px; border-radius: 50% }
+.chip { display: inline-block; font: 500 11.5px/1 var(--f-body); padding: 4px 8px; border-radius: 999px; white-space: nowrap }
+.chip.ok { background: var(--good-bg); color: var(--good-ink) }
+.chip.wait { background: var(--warn-bg); color: var(--warn-ink) }
+.filters { display: flex; flex-wrap: wrap; gap: 6px }
+.filters button { font: 500 13px var(--f-body); color: var(--ink-2); background: transparent; border: 1px solid var(--rule); border-radius: 999px; padding: 5px 12px; cursor: pointer }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.table-wrap { overflow-x: auto }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 860px }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top }
+th { font: 500 12px var(--f-body); color: var(--ink-3); text-transform: uppercase; letter-spacing: .05em; cursor: pointer; white-space: nowrap; user-select: none }
+th.num, td.num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+th[aria-sort] { color: var(--ink) }
+td.name { font-family: var(--f-mono); font-size: 12.5px; white-space: nowrap }
+td.desc { color: var(--ink-2); min-width: 280px }
+tr.best td { background: color-mix(in srgb, var(--corr) 9%, transparent) }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px }
+.status { display: grid; gap: 10px }
+.status ul { margin: 0; padding-left: 18px; color: var(--ink-2) }
+details { border-top: 1px solid var(--rule); padding-top: 10px }
+summary { cursor: pointer; font: 600 15px var(--f-body); }
+.lit { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 13.5px }
+.lit li { display: grid; gap: 2px }
+.lit .note { color: var(--ink-3); font-size: 12.5px }
+.ideas { margin: 10px 0 0; padding-left: 20px; color: var(--ink-2); font-size: 13.5px }
+.ideas li + li { margin-top: 4px }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Numerai v5.3 · target ender20 · experiment nn_arch_ender20</div>
+    <h1>Ender20 neural-network search</h1>
+    <p class="lede">Which neural network adds the most signal beyond Numerai's LightGBM benchmark? Every cross-validated run, scored by BMC (benchmark model contribution) over out-of-fold eras.</p>
+    <div class="meta"><span id="updated"></span><a href="https://github.com/VolodymyrLinuxovich/example-scripts/blob/nn-arch-ender20/numerai/agents/experiments/nn_arch_ender20/experiment.md">Read the paper on GitHub</a></div>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Summary"></section>
+
+  <section class="panel status" id="status" aria-labelledby="status-h">
+    <h2 id="status-h">Now running: confirmation on unseen eras</h2>
+    <p>The winners are being retrained on 613 eras never used during the search (twice the data per fold). The first result dropped. More training steps per epoch on the larger data could explain it (the over-training signature), so shorter 3- and 4-epoch runs are queued to test that.</p>
+    <div id="status-body"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel" aria-labelledby="c1-h">
+      <h2 id="c1-h">Every run, by round</h2>
+      <p>BMC over the last 200 eras. Higher is better; hover a point for its configuration.</p>
+      <div class="legend" id="legend1"></div>
+      <div class="chart"><canvas id="c1" role="img" aria-label="Scatter of BMC by round for every run"></canvas></div>
+    </section>
+    <section class="panel" aria-labelledby="c2-h">
+      <h2 id="c2-h">Uniqueness drives contribution</h2>
+      <p>Each scout run's correlation with the benchmark against its BMC. Models further from the benchmark contribute more, up to the point where raw signal collapses.</p>
+      <div class="legend" id="legend2"></div>
+      <div class="chart"><canvas id="c2" role="img" aria-label="Scatter of benchmark correlation against BMC"></canvas></div>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="c3-h">
+    <h2 id="c3-h">Cumulative BMC across out-of-fold eras</h2>
+    <p>Scout data, same 246 eras for every model. A steadily rising line means the contribution is consistent over time, not driven by a few eras.</p>
+    <div class="legend" id="legend3"></div>
+    <div class="chart"><canvas id="c3" role="img" aria-label="Cumulative BMC by era for three models"></canvas></div>
+  </section>
+
+  <section class="panel" aria-labelledby="t-h">
+    <h2 id="t-h">All runs</h2>
+    <p>Click a column header to sort. The highlighted row is the best seed-confirmed model.</p>
+    <div class="filters" id="filters" role="group" aria-label="Filter by round"></div>
+    <div class="table-wrap"><table id="runs"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="panel" aria-labelledby="lit-h">
+    <h2 id="lit-h">Literature</h2>
+    <p>Sources gathered to plan the next experiments. Every link was opened and checked. Each group ends with the experiments it suggests.</p>
+    <div id="lit"></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const DATA = /*__DATA__*/null;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const f4 = v => (v == null || Number.isNaN(v)) ? "–" : v.toFixed(4);
+const f2 = v => (v == null || Number.isNaN(v)) ? "–" : v.toFixed(2);
+const LOSS = { lgbm: "LightGBM", mse: "MSE loss", corr: "Correlation loss" };
+const colorOf = l => css(l === "lgbm" ? "--lgbm" : l === "mse" ? "--mse" : "--corr");
+const runs = DATA.runs;
+const scout = runs.filter(r => r.data === "scout");
+const confirmed = scout.filter(r => r.seeds >= 3 && r.loss !== "lgbm");
+const best = confirmed.reduce((a, b) => (b.bmc200 > a.bmc200 ? b : a), confirmed[0]);
+const base = runs.find(r => r.name === "r0_baseline_small_lgbm");
+
+document.getElementById("updated").textContent = "Updated " + DATA.updated;
+
+// Summary
+const kpis = [
+  ["Best confirmed BMC (last 200 eras)", f4(best.bmc200), best.desc],
+  ["Versus LightGBM baseline", (best.bmc200 / base.bmc200).toFixed(1) + "×", "baseline BMC " + f4(base.bmc200)],
+  ["Runs completed", String(runs.length), DATA.running.length + " running or queued"],
+  ["Sources reviewed", String(DATA.literature.reduce((s, g) => s + g.items.length, 0)), DATA.literature.length + " research areas"],
+];
+document.getElementById("kpis").innerHTML = kpis.map(([l, v, s]) =>
+  `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${s}</div></div>`).join("");
+
+// Scale status
+const scale = runs.filter(r => r.data === "scale");
+const ref = runs.find(r => r.name === "r6_wide_lr2e3_ep6_seeds3");
+document.getElementById("status-body").innerHTML =
+  `<div class="table-wrap"><table style="min-width:620px"><thead><tr><th>Run</th><th>Configuration</th><th class="num">Corr</th><th class="num">BMC last 200</th><th class="num">Corr w/ benchmark</th><th>Status</th></tr></thead><tbody>` +
+  [ref, ...scale].map(r => `<tr><td class="name">${r.name}</td><td class="desc">${r.desc}${r === ref ? " (scout data, for reference)" : ""}</td><td class="num">${f4(r.corr)}</td><td class="num">${f4(r.bmc200)}</td><td class="num">${f2(r.benchCorr)}</td><td><span class="chip ok">done</span></td></tr>`).join("") +
+  DATA.running.map(n => `<tr><td class="name">${n}</td><td class="desc">training on scale data</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td><span class="chip wait">running / queued</span></td></tr>`).join("") +
+  `</tbody></table></div>`;
+
+// Legends
+const lossLegend = keys => keys.map(k => `<span><i class="sw" style="background:${colorOf(k)}"></i>${LOSS[k]}</span>`).join("");
+document.getElementById("legend1").innerHTML = lossLegend(["lgbm", "mse", "corr"]);
+document.getElementById("legend2").innerHTML = lossLegend(["lgbm", "mse", "corr"]);
+
+// Charts
+const roundOrder = [...new Set(runs.map(r => r.round))];
+let charts = [];
+function baseOpts(xTitle, yTitle) {
+  const ink2 = css("--ink-2"), grid = css("--grid");
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false, locale: "en-US",
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: css("--ink"), titleColor: css("--bg"), bodyColor: css("--bg"), padding: 10, displayColors: false } },
+    scales: {
+      x: { title: { display: true, text: xTitle, color: ink2 }, ticks: { color: ink2 }, grid: { color: grid } },
+      y: { title: { display: true, text: yTitle, color: ink2 }, ticks: { color: ink2 }, grid: { color: grid } },
+    },
+  };
+}
+function tip(r) { return [r.name, r.desc, `BMC last 200: ${f4(r.bmc200)} · corr: ${f4(r.corr)}`, `corr with benchmark: ${f2(r.benchCorr)}`]; }
+function draw() {
+  charts.forEach(c => c.destroy());
+  const surface = css("--panel");
+  // 1. By round
+  const jitter = (r, i) => roundOrder.indexOf(r.round) + ((i % 5) - 2) * 0.07;
+  const o1 = baseOpts("", "BMC, last 200 eras");
+  o1.scales.x.min = -0.5; o1.scales.x.max = roundOrder.length - 0.5;
+  o1.scales.x.afterBuildTicks = axis => { axis.ticks = roundOrder.map((_, i) => ({ value: i })); };
+  o1.scales.x.ticks = { color: css("--ink-2"), autoSkip: false, callback: v => (roundOrder[v] || "").toUpperCase() };
+  o1.plugins.tooltip.callbacks = { title: () => "", label: c => tip(c.raw.r) };
+  charts.push(new Chart(document.getElementById("c1"), { type: "scatter", options: o1, data: { datasets: ["lgbm", "mse", "corr"].map(l => ({
+    label: LOSS[l], data: runs.map((r, i) => ({ r, i })).filter(d => d.r.loss === l).map(d => ({ x: jitter(d.r, d.i), y: d.r.bmc200, r: d.r })),
+    backgroundColor: colorOf(l), borderColor: surface, borderWidth: 2, pointRadius: 6, pointHoverRadius: 8 })) } }));
+  // 2. Benchmark correlation vs BMC
+  const o2 = baseOpts("Correlation with benchmark", "BMC, last 200 eras");
+  o2.plugins.tooltip.callbacks = { title: () => "", label: c => tip(c.raw.r) };
+  charts.push(new Chart(document.getElementById("c2"), { type: "scatter", options: o2, data: { datasets: ["lgbm", "mse", "corr"].map(l => ({
+    label: LOSS[l], data: scout.filter(r => r.loss === l).map(r => ({ x: r.benchCorr, y: r.bmc200, r })),
+    backgroundColor: colorOf(l), borderColor: surface, borderWidth: 2, pointRadius: 6, pointHoverRadius: 8 })) } }));
+  // 3. Cumulative BMC
+  const slotColor = { base: css("--lgbm"), s1: css("--mse"), s2: css("--corr") };
+  document.getElementById("legend3").innerHTML = DATA.curves.map(c => `<span><i class="sw" style="background:${slotColor[c.slot]}"></i>${c.label}</span>`).join("");
+  const o3 = baseOpts("Era", "Cumulative BMC");
+  o3.interaction = { mode: "index", intersect: false };
+  o3.plugins.tooltip.displayColors = true;
+  o3.plugins.tooltip.callbacks = { title: items => "Era " + items[0].label, label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(3)}` };
+  charts.push(new Chart(document.getElementById("c3"), { type: "line", options: o3, data: {
+    labels: DATA.curves[0].eras,
+    datasets: DATA.curves.map(c => ({ label: c.label, data: c.cum, borderColor: slotColor[c.slot], borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, tension: 0 })) } }));
+}
+draw();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+// Table
+const cols = [
+  ["name", "Run", false], ["desc", "Configuration", false], ["corr", "Corr", true], ["bmc", "BMC", true],
+  ["bmc200", "BMC last 200", true], ["bmcSharpe", "BMC Sharpe", true], ["benchCorr", "Corr w/ bench", true],
+];
+let sortKey = "bmc200", sortDir = -1, roundFilter = "all";
+const thead = document.querySelector("#runs thead"), tbody = document.querySelector("#runs tbody");
+function renderTable() {
+  thead.innerHTML = "<tr>" + cols.map(([k, l, n]) => `<th class="${n ? "num" : ""}" data-k="${k}" ${k === sortKey ? `aria-sort="${sortDir < 0 ? "descending" : "ascending"}"` : ""}>${l}${k === sortKey ? (sortDir < 0 ? " ↓" : " ↑") : ""}</th>`).join("") + "</tr>";
+  const rows = runs.filter(r => roundFilter === "all" || r.round === roundFilter)
+    .sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : a[sortKey] < b[sortKey] ? -1 : 0) * sortDir);
+  tbody.innerHTML = rows.map(r => `<tr class="${r === best ? "best" : ""}">` + cols.map(([k, , n]) => {
+    if (k === "name") return `<td class="name"><i class="dot" style="background:${colorOf(r.loss)}"></i>${r.name}</td>`;
+    if (k === "desc") return `<td class="desc">${r.desc}${r.data === "scale" ? ' <span class="chip wait">unseen eras</span>' : ""}</td>`;
+    return `<td class="num">${k === "bmcSharpe" || k === "benchCorr" ? f2(r[k]) : f4(r[k])}</td>`;
+  }).join("") + "</tr>").join("");
+  thead.querySelectorAll("th").forEach(th => th.onclick = () => {
+    const k = th.dataset.k; sortDir = k === sortKey ? -sortDir : -1; sortKey = k; renderTable();
+  });
+}
+const filters = document.getElementById("filters");
+filters.innerHTML = [["all", "All rounds"], ...roundOrder.map(r => [r, runs.find(x => x.round === r).roundName])]
+  .map(([k, l]) => `<button type="button" id="f-${k}" data-k="${k}" aria-pressed="${k === "all"}">${l}</button>`).join("");
+filters.querySelectorAll("button").forEach(b => b.onclick = () => {
+  roundFilter = b.dataset.k; filters.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderTable();
+});
+renderTable();
+
+// Literature
+document.getElementById("lit").innerHTML = DATA.literature.map((g, i) =>
+  `<details ${i === 0 ? "open" : ""}><summary>${g.title} (${g.items.length} sources)</summary>
+   <ul class="lit">${g.items.map(it => `<li>${it.url ? `<a href="${it.url}" target="_blank" rel="noopener">${it.label}</a>` : it.label}<span class="note">${it.note}</span></li>`).join("")}</ul>
+   <ol class="ideas">${g.ideas.map(x => `<li>${x}</li>`).join("")}</ol></details>`).join("");
+</script>
