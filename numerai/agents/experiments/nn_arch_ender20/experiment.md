@@ -68,3 +68,25 @@ Base for the correlation-loss variants: r1_mlp_corr (256→128, 4-era batches).
 ## Round 3: refine around the leader (r2_corr_ep8)
 One change each: correlation-loss epochs 5 and 12 (map the peak), wide network + correlation
 loss at 6 epochs, dropout 0.3 at 8 epochs, and a 3-seed average (also measures seed noise).
+
+| model | change | corr | bmc | bmc_last_200 | corr_with_bench |
+|---|---|---|---|---|---|
+| r2_corr_ep8 | leader (round 2) | 0.0253 | 0.0083 | **0.0085** | 0.340 |
+| r3_corr_ep8_seeds3 | 3-seed average | 0.0261 | 0.0082 | 0.0083 | 0.357 |
+| r3_wide_corr_ep6 | wide MLP, corr loss, 6 epochs | 0.0261 | 0.0079 | 0.0077 | 0.360 |
+| r3_corr_ep12 | 12 epochs | 0.0225 | 0.0073 | 0.0077 | 0.301 |
+| r3_corr_ep5 | 5 epochs | 0.0253 | 0.0067 | 0.0069 | 0.379 |
+| r3_corr_ep8_drop03 | dropout 0.3 | 0.0260 | 0.0067 | 0.0068 | 0.390 |
+
+**Findings**
+- No improvement over the leader (first non-improving round).
+- 8 epochs is the peak: longer training keeps lowering correlation with the benchmark, but past
+  8 epochs raw corr drops faster than uniqueness helps.
+- Seed noise is about ±0.0002 BMC: the 3-seed average matches the leader and raises corr.
+  Its predictions correlate 0.96 with the single-seed run.
+- Width works with correlation loss once training is short (6 epochs), close to but below the
+  narrow leader. Extra dropout at 8 epochs pulls predictions toward the benchmark and lowers BMC.
+
+## Round 4: untested dimensions
+One change each from the leader: learning rate 5e-4 and 2e-3, 8 eras per batch, depth
+(512→256→128), input dropout 0.1.
