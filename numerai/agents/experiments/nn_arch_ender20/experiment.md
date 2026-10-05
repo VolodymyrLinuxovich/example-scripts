@@ -37,9 +37,27 @@ Each variant changes one thing.
 - Width helps: the wide MLP (1024→512→256) is the round-1 winner on corr and both BMC metrics.
 - Plain MLPs beat the LightGBM baseline on BMC, despite lower raw corr: their predictions
   are less correlated with the benchmark, so they add more unique signal.
-- Correlation loss gives the best BMC but overfits hard (train corr 0.24 vs OOF 0.018).
+- Correlation loss at 20 epochs overfits hard (train corr 0.24 vs OOF 0.018).
 - More elaborate architectures (residual MLP, TabM) and learned embeddings all did worse.
   Scalar inputs ((x−2)/2) are clearly better than embeddings.
 
-**Next (round 2):** test width further (wider MLP, wide + correlation loss, more epochs), regularize the correlation-loss MLP (dropout, weight decay, fewer epochs,
-correlation + MSE hybrid) and test whether the MSE MLP is under-trained.
+## Round 2: training length, regularization, width
+Base for the correlation-loss variants: r1_mlp_corr (256→128, 4-era batches).
+
+| model | change | corr | bmc | bmc_last_200 | corr_with_bench |
+|---|---|---|---|---|---|
+| r2_corr_ep8 | corr loss, 8 epochs (was 20) | 0.0253 | 0.0083 | **0.0085** | 0.340 |
+| r2_corr_epb1 | corr loss, 1 era per batch, 5 epochs | 0.0254 | 0.0078 | 0.0080 | 0.350 |
+| r2_mse_ep8 | MSE MLP, 8 epochs (was 4) | 0.0244 | 0.0071 | 0.0074 | 0.340 |
+| r2_corr_reg | corr loss, dropout 0.3, weight decay 1e-3 | 0.0230 | 0.0068 | 0.0070 | 0.319 |
+| r2_corr_mse | corr + 0.1·MSE hybrid, 20 epochs | 0.0184 | 0.0052 | 0.0057 | 0.265 |
+| r2_wide_corr | wide MLP + corr loss, 20 epochs | running | | | |
+| r2_wider_mse | 2048→1024→512, dropout 0.3 | queued | | | |
+| r2_wide_ep8 | wide MLP, MSE, 8 epochs | queued | | | |
+
+**Findings so far**
+- Training length is the dominant lever. Correlation loss at 20 epochs overfits, at 8 it is the
+  best model so far (+37% BMC over the round-1 best). MSE at 4 epochs was under-trained; 8 epochs
+  lifts it past the wide MLP.
+- Both losses converge on about 8 epochs for this data size.
+- The MSE term in the hybrid is too weak at weight 0.1 to change anything; dropped.
