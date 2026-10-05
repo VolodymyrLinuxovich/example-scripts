@@ -51,13 +51,20 @@ Base for the correlation-loss variants: r1_mlp_corr (256→128, 4-era batches).
 | r2_mse_ep8 | MSE MLP, 8 epochs (was 4) | 0.0244 | 0.0071 | 0.0074 | 0.340 |
 | r2_corr_reg | corr loss, dropout 0.3, weight decay 1e-3 | 0.0230 | 0.0068 | 0.0070 | 0.319 |
 | r2_corr_mse | corr + 0.1·MSE hybrid, 20 epochs | 0.0184 | 0.0052 | 0.0057 | 0.265 |
-| r2_wide_corr | wide MLP + corr loss, 20 epochs | running | | | |
-| r2_wider_mse | 2048→1024→512, dropout 0.3 | queued | | | |
-| r2_wide_ep8 | wide MLP, MSE, 8 epochs | queued | | | |
+| r2_wide_corr | wide MLP + corr loss, 20 epochs | 0.0183 | 0.0059 | 0.0059 | 0.247 |
+| r2_wider_mse | 2048→1024→512, dropout 0.3 | 0.0255 | 0.0057 | 0.0059 | 0.404 |
+| r2_wide_ep8 | wide MLP, MSE, 8 epochs (was 4) | 0.0229 | 0.0073 | 0.0076 | 0.304 |
 
 **Findings so far**
 - Training length is the dominant lever. Correlation loss at 20 epochs overfits, at 8 it is the
   best model so far (+37% BMC over the round-1 best). MSE at 4 epochs was under-trained; 8 epochs
   lifts it past the wide MLP.
 - Both losses converge on about 8 epochs for this data size.
+- Width has plateaued for MSE: 2048-wide is no better than 1024-wide. The wide MLP also gains
+  from 8 epochs (0.0062 → 0.0076), but still trails the narrow correlation-loss model.
+- Wide + correlation loss at 20 epochs overfits even faster (train corr 0.28).
 - The MSE term in the hybrid is too weak at weight 0.1 to change anything; dropped.
+
+## Round 3: refine around the leader (r2_corr_ep8)
+One change each: correlation-loss epochs 5 and 12 (map the peak), wide network + correlation
+loss at 6 epochs, dropout 0.3 at 8 epochs, and a 3-seed average (also measures seed noise).
