@@ -131,3 +131,24 @@ at lr 2e-3, 6 epochs.
 
 ## Round 6: seed confirmation
 3-seed runs of both lr 2e-3 / 6-epoch configs (narrow and wide), plus 5 epochs for each.
+
+| model | change | corr | bmc | bmc_last_200 | corr_with_bench |
+|---|---|---|---|---|---|
+| r6_wide_lr2e3_ep6_seeds3 | wide, lr 2e-3, 6 epochs, 3 seeds | 0.0260 | **0.0088** | **0.0089** | 0.336 |
+| r6_ens_narrow_wide | rank-average of the two 3-seed models | 0.0263 | 0.0087 | 0.0088 | |
+| r6_lr2e3_ep6_seeds3 | narrow, lr 2e-3, 6 epochs, 3 seeds | 0.0262 | 0.0085 | 0.0086 | 0.355 |
+| r6_lr2e3_ep5 | narrow, 5 epochs | 0.0258 | 0.0080 | 0.0081 | 0.360 |
+| r6_wide_lr2e3_ep5 | wide, 5 epochs | 0.0257 | 0.0079 | 0.0078 | 0.348 |
+
+**Findings**
+- Both leaders survive seed averaging; the wide one is the best confirmed model
+  (0.0089 vs 0.0083 for the round-3 best, 2.1× the LightGBM baseline).
+- 6 epochs is the peak at lr 2e-3; 5 epochs loses about 0.001 BMC for both networks.
+- Narrow and wide predictions correlate 0.96, so ensembling them adds nothing.
+- Plateau reached on the scout data.
+
+## Scale step: disjoint, larger data
+Every 2nd era at offset 1 (`v5.3/half_odd_full.parquet`, 613 eras, 3.4M rows), sharing no eras
+with the 307 scout eras. This doubles the training data and tests whether the choices made during
+the search generalize to unseen eras. Training on all eras with medium features would need ~17 GB,
+more than this machine has.
