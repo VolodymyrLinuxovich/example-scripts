@@ -13,6 +13,10 @@ class TorchNNRegressor:
       input_encoding: "scalar" ((x-2)/2) | "embed" (learned per-bin embedding of size embed_dim)
       hidden: list[int] for mlp/tabm, or width for resmlp (with n_blocks)
       loss: "mse" | "corr" (per-era Pearson) | "corr_mse" (corr + mse_weight * mse)
+            | "corr_bench" (corr - bench_penalty * corr(pred, benchmark)^2)
+            | "bmc" (per-era corr of the prediction residualized against the benchmark)
+      bench_col: benchmark-prediction column in X used by the benchmark-aware losses (never an input)
+      interp_alpha: after training, set weights to theta0 + alpha * (theta_T - theta0)
       batching: "random" (row batches) | "era" (each batch is eras_per_batch whole eras)
     Training runs a fixed number of epochs (no early stopping, no validation leakage).
     """
@@ -31,6 +35,9 @@ class TorchNNRegressor:
         activation: str = "silu",
         loss: str = "mse",
         mse_weight: float = 0.1,
+        bench_col: str | None = None,
+        bench_penalty: float = 0.0,
+        interp_alpha: float = 1.0,
         batching: str = "random",
         batch_size: int = 4096,
         eras_per_batch: int = 1,
@@ -65,6 +72,9 @@ class TorchNNRegressor:
             activation=activation,
             loss=loss,
             mse_weight=mse_weight,
+            bench_col=bench_col,
+            bench_penalty=bench_penalty,
+            interp_alpha=interp_alpha,
             batching=batching,
             batch_size=batch_size,
             eras_per_batch=eras_per_batch,
@@ -205,8 +215,8 @@ class TorchNNRegressor:
         raise ValueError(f"Unknown arch '{arch}'")
 
     # ------------------------------------------------------------------ loss
-    def _loss(self, pred, y, groups):
-        """pred: (B,) or (B, k); y: (B,); groups: list of (start, end) era slices."""
+    def _loss(self, pred, y, groups, b=None):
+        """pred: (B,) or (B, k); y: (B,); b: benchmark (B,) or None; groups: era slices."""
         torch = self._torch
         p = self.params
         if pred.dim() == 1:
@@ -215,13 +225,25 @@ class TorchNNRegressor:
         mse = ((pred - yk) ** 2).mean()
         if p["loss"] == "mse":
             return mse
-        corrs = []
+        corrs, bench_sq = [], []
         for s, e in groups:
             pp = pred[s:e] - pred[s:e].mean(0, keepdim=True)
             yy = yk[s:e] - yk[s:e].mean(0, keepdim=True)
+            if b is not None:
+                bb = (b[s:e] - b[s:e].mean()).unsqueeze(-1)
+                if p["loss"] == "bmc":
+                    beta = (pp * bb).sum(0, keepdim=True) / ((bb * bb).sum() + 1e-8)
+                    pp = pp - beta * bb
+                else:
+                    cb = (pp * bb).sum(0) / (pp.norm(dim=0) * bb.norm() + 1e-8)
+                    bench_sq.append((cb ** 2).mean())
             c = (pp * yy).sum(0) / (pp.norm(dim=0) * yy.norm(dim=0) + 1e-8)
             corrs.append(c.mean())
         corr_loss = -torch.stack(corrs).mean()
+        if p["loss"] == "bmc":
+            return corr_loss
+        if p["loss"] == "corr_bench":
+            return corr_loss + p["bench_penalty"] * torch.stack(bench_sq).mean()
         if p["loss"] == "corr":
             return corr_loss
         if p["loss"] == "corr_mse":
@@ -238,12 +260,20 @@ class TorchNNRegressor:
         x_np = self._features(X)
         y_np = np.asarray(y, dtype=np.float32) - 0.5
         y_np = np.nan_to_num(y_np, nan=0.0)
+        uses_bench = p["loss"] in ("corr_bench", "bmc")
+        if uses_bench:
+            if not p["bench_col"] or p["bench_col"] not in X.columns:
+                raise ValueError(f"loss='{p['loss']}' needs bench_col present in X (x_groups benchmark_models).")
+            # Eras without benchmark coverage get a constant, which contributes nothing per era.
+            b_np = np.nan_to_num(X[p["bench_col"]].to_numpy(dtype=np.float32), nan=0.5)
 
         # sort by era so era batches are contiguous slices
         if eras is not None:
             era_codes, _ = pd_factorize_sorted(eras)
             order = np.argsort(era_codes, kind="stable")
             x_np, y_np, era_codes = x_np[order], y_np[order], era_codes[order]
+            if uses_bench:
+                b_np = b_np[order]
             bounds = np.flatnonzero(np.diff(era_codes)) + 1
             starts = np.concatenate([[0], bounds])
             ends = np.concatenate([bounds, [len(era_codes)]])
@@ -255,6 +285,7 @@ class TorchNNRegressor:
         dev = self.device
         x_t = torch.from_numpy(x_np).to(dev)
         y_t = torch.from_numpy(y_np).to(dev)
+        b_t = torch.from_numpy(b_np).to(dev) if uses_bench else None
         n = len(y_np)
 
         self.models_ = []
@@ -263,6 +294,7 @@ class TorchNNRegressor:
             torch.manual_seed(seed)
             rng = np.random.default_rng(seed)
             model = self._build(x_np.shape[1]).to(dev)
+            theta0 = {k: v.detach().clone() for k, v in model.state_dict().items()}
             opt = torch.optim.AdamW(model.parameters(), lr=p["lr"], weight_decay=p["weight_decay"])
 
             if p["batching"] == "era":
@@ -297,7 +329,8 @@ class TorchNNRegressor:
                             groups.append((off, off + e - s))
                             off += e - s
                         idx = torch.cat(idx_parts)
-                        loss = self._loss(model(x_t[idx]), y_t[idx], groups)
+                        loss = self._loss(model(x_t[idx]), y_t[idx], groups,
+                                          b_t[idx] if b_t is not None else None)
                         opt.zero_grad(set_to_none=True)
                         loss.backward()
                         opt.step()
@@ -321,8 +354,15 @@ class TorchNNRegressor:
                         flush=True,
                     )
             model.eval()
+            alpha = float(p["interp_alpha"])
+            if alpha != 1.0:
+                with torch.no_grad():
+                    state = model.state_dict()
+                    for k, v in state.items():
+                        if v.is_floating_point():
+                            v.copy_(theta0[k] + alpha * (v - theta0[k]))
             self.models_.append(model.cpu())
-        del x_t, y_t
+        del x_t, y_t, b_t
         if dev.type == "mps":
             torch.mps.empty_cache()
         return self
