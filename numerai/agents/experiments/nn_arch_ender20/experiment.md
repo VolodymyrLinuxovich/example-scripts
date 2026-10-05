@@ -111,3 +111,23 @@ One change each from the leader: learning rate 5e-4 and 2e-3, 8 eras per batch, 
 ## Round 5: confirm and map the lr 2e-3 region
 3-seed average at lr 2e-3; lr 3e-3; lr 2e-3 at 6 and 10 epochs; wide network + correlation loss
 at lr 2e-3, 6 epochs.
+
+| model | change | corr | bmc | bmc_last_200 | corr_with_bench |
+|---|---|---|---|---|---|
+| r5_lr2e3_ep6 | lr 2e-3, 6 epochs | 0.0257 | 0.0087 | **0.0090** | 0.341 |
+| r5_wide_lr2e3_ep6 | wide, lr 2e-3, 6 epochs | 0.0256 | 0.0088 | 0.0088 | 0.327 |
+| r3_corr_ep8_seeds3 | reference: lr 1e-3, 8 epochs, 3 seeds | 0.0261 | 0.0082 | 0.0083 | 0.357 |
+| r5_lr2e3_seeds3 | lr 2e-3, 8 epochs, 3 seeds | 0.0242 | 0.0080 | 0.0083 | 0.320 |
+| r5_lr3e3 | lr 3e-3, 8 epochs | 0.0217 | 0.0078 | 0.0082 | 0.277 |
+| r5_lr2e3_ep10 | lr 2e-3, 10 epochs | 0.0216 | 0.0075 | 0.0081 | 0.277 |
+
+**Findings**
+- The round-4 lr 2e-3 gain was seed luck: averaged over 3 seeds it ties lr 1e-3 (0.0083).
+  Single-seed noise is about ±0.0006 BMC, larger than the round-3 estimate.
+- Higher lr moves the best epoch count earlier. At lr 2e-3, BMC falls steadily from 6 to 10
+  epochs; 6 epochs gives the best single runs so far, with no loss of raw corr.
+- At these settings the wide network ties the narrow one.
+- Both leaders are single seeds, so round 6 confirms them with 3-seed runs.
+
+## Round 6: seed confirmation
+3-seed runs of both lr 2e-3 / 6-epoch configs (narrow and wide), plus 5 epochs for each.
