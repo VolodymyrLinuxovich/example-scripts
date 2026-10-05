@@ -39,11 +39,11 @@ It runs on Google Colab (GPU or CPU) or locally. The full study, code and paper 
 
 code("""
 # Install dependencies (PyTorch is preinstalled on Colab; it is only needed for training)
-!pip install -q numerapi pyarrow cloudpickle numerai-tools matplotlib
+%pip install -q numerapi pyarrow cloudpickle numerai-tools matplotlib
 try:
     import torch
 except ImportError:
-    !pip install -q torch
+    %pip install -q torch
 """)
 
 md("""
@@ -54,7 +54,7 @@ batch of `ERAS_PER_BATCH` whole eras.
 """)
 
 code("""
-import sys, json, math, gc
+import sys, json, math, gc, warnings
 import numpy as np
 import pandas as pd
 import torch
@@ -75,6 +75,8 @@ N_SEEDS = 3                       # average of independently trained networks
 FINAL_FIT_ON_ALL = True           # retrain on train + validation eras for the upload model
 FINAL_ERA_STRIDE = 2              # use every 2nd era in the final fit to fit in ~12 GB of RAM
 
+warnings.filterwarnings("ignore", message="The given NumPy array is not writable")
+warnings.filterwarnings("ignore", message="Converting a tensor with requires_grad")
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 print(f"Python {sys.version.split()[0]} · torch {torch.__version__} · device {DEVICE}")
 """)
@@ -168,7 +170,7 @@ def train_networks(df, steps=TOTAL_STEPS, seeds=N_SEEDS):
             pos += ERAS_PER_BATCH
             opt.zero_grad(); (loss / ERAS_PER_BATCH).backward(); opt.step(); sched.step()
             if (step + 1) % 50 == 0:
-                print(f"  seed {seed}  step {step + 1}/{steps}  loss {float(loss) / ERAS_PER_BATCH:+.4f}")
+                print(f"  seed {seed}  step {step + 1}/{steps}  loss {loss.item() / ERAS_PER_BATCH:+.4f}")
         net.eval()
         exported.append([(m.weight.detach().cpu().numpy().astype(np.float32),
                           m.bias.detach().cpu().numpy().astype(np.float32))
@@ -188,10 +190,14 @@ upload pickle needs only numpy and pandas.
 code("""
 def numpy_forward(weights, x_int8):
     h = (x_int8.astype(np.float32) - 2.0) / 2.0
-    for i, (w, bias) in enumerate(weights):
-        h = h @ w.T + bias
-        if i < len(weights) - 1:
-            h = h / (1.0 + np.exp(-h))   # SiLU
+    # numpy 2.x on macOS can emit spurious float warnings in matmul; outputs are checked below
+    with np.errstate(all="ignore"):
+        for i, (w, bias) in enumerate(weights):
+            h = h @ w.T + bias
+            if i < len(weights) - 1:
+                h = h / (1.0 + np.exp(-h))   # SiLU
+    if not np.isfinite(h).all():
+        raise ValueError("non-finite network output")
     return h[:, 0]
 
 
@@ -208,7 +214,7 @@ md("## Train on the training eras")
 code("""
 networks = train_networks(train)
 last_train_era = int(train["era"].max())
-del train; gc.collect()
+del train; _ = gc.collect()
 """)
 
 md("""
@@ -248,7 +254,7 @@ ax.plot(bmc.cumsum().values, label="BMC", color="#eb6834", lw=2)
 ax.set_xlabel("Validation era"); ax.set_ylabel("Cumulative score"); ax.legend(frameon=False)
 ax.set_title("Out-of-sample validation", loc="left")
 plt.show()
-del validation, scored; gc.collect()
+del validation, scored; _ = gc.collect()
 """)
 
 md("""
@@ -269,7 +275,7 @@ if FINAL_FIT_ON_ALL:
                       load("validation", filters=[("data_type", "==", "validation"), ("era", "in", keep)])])
     print(f"final fit: {len(full):,} rows, {full.era.nunique()} eras")
     networks = train_networks(full)
-    del full; gc.collect()
+    del full; _ = gc.collect()
 """)
 
 md("## Predict live data and build the upload file")
@@ -300,6 +306,15 @@ reloaded = pickle.load(open("ender_nn_model.pkl", "rb"))
 assert np.allclose(reloaded(live)["prediction"], live_predictions["prediction"])
 import os
 print(f"ender_nn_model.pkl: {os.path.getsize('ender_nn_model.pkl') / 1e6:.1f} MB, built with Python {sys.version.split()[0]}")
+""")
+
+code("""
+# Download the file automatically when running in Google Colab
+try:
+    from google.colab import files
+    files.download("ender_nn_model.pkl")
+except ImportError:
+    pass
 """)
 
 md("""
