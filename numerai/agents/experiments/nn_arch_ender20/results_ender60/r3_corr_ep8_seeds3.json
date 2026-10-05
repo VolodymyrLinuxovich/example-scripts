@@ -1,0 +1,27 @@
+{
+  "run": "r3_corr_ep8_seeds3",
+  "target": "target_ender_60",
+  "benchmark": "v53_lgbm_ender60",
+  "metrics": {
+    "corr": {
+      "mean": 0.026086123136383973,
+      "std": 0.015193718285573242,
+      "sharpe": 1.7169018568123182,
+      "max_drawdown": 0.029433333319002164
+    },
+    "bmc": {
+      "mean": 0.006176188981492828,
+      "std": 0.012246741099893148,
+      "sharpe": 0.5043128560582305,
+      "max_drawdown": 0.086731810531129,
+      "avg_corr_with_benchmark": 0.3761896324703292
+    },
+    "bmc_last_200_eras": {
+      "mean": 0.005675702392627564,
+      "std": 0.011590775009339584,
+      "sharpe": 0.48967410617963086,
+      "max_drawdown": 0.08673181053112922,
+      "avg_corr_with_benchmark": 0.39413322227904196
+    }
+  }
+}

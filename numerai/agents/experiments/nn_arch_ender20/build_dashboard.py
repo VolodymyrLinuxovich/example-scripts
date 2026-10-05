@@ -18,7 +18,7 @@ from agents.code.metrics import numerai_metrics as nm  # noqa: E402
 ROUND_NAMES = {
     "r0": "Baselines", "r1": "Round 1 · architecture", "r2": "Round 2 · training length",
     "r3": "Round 3 · refine", "r4": "Round 4 · new knobs", "r5": "Round 5 · lr 2e-3",
-    "r6": "Round 6 · seed check", "s1": "Scale · unseen eras",
+    "r6": "Round 6 · seed check", "r7": "Round 7 · literature ideas", "r8": "Round 8 · confirmation", "s1": "Scale · unseen eras",
 }
 # Models whose cumulative BMC is drawn (scout data, same eras for all).
 CURVES = [

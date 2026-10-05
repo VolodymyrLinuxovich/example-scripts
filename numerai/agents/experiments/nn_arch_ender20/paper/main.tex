@@ -34,10 +34,12 @@ per-era Pearson-correlation loss for a short time. Averaged over three seeds it 
 the same data. Architecture mattered far less than one variable: the amount of training.
 Training moves predictions steadily away from the benchmark, raising \bmc{}, until it starts
 to destroy raw signal; every knob we varied (epochs, learning rate, batch size, dropout) lands
-on this single curve. On 613 eras never used during the search, the result transfers once the
+on this single curve. On 613 eras never used during the search, the result transfers exactly once the
 training amount is held fixed in optimizer steps rather than epochs: the 6-epoch recipe
-over-trains on twice the data, while 4~epochs recovers \bmc{}~0.0082. This matches the
-continuous-time view of early stopping as ridge regularization.
+over-trains on twice the data (\bmc{}~0.0056), while 3~epochs, the same number of steps,
+reproduces the scout correlation and reaches \bmc{}~0.0095. This matches the continuous-time
+view of early stopping as ridge regularization. Scored on the 60-day target that Numerai now
+pays on, the network's contribution is about $30\times$ that of the LightGBM baseline.
 \end{abstract}
 
 \section{Introduction}
@@ -269,10 +271,50 @@ twice the training rows per fold (Table~\ref{tab:scale}). Run unchanged, the six
 dropped to 0.0056, with exactly the signature of over-training seen in
 Figure~\ref{fig:training}: lower raw correlation and lower benchmark correlation (0.28 against
 0.34 on scout data). With twice the rows per epoch, six epochs means twice as many optimizer
-steps. Cutting to four epochs recovers \bmc{}~0.0082 and returns benchmark correlation to its
-scout level (0.33), on data the search never touched. The optimal training amount is
-therefore a fixed number of optimizer steps, not epochs, consistent with the continuous-time
-view in which stopping time sets the effective regularization \citep{ali2019continuous}.
+steps. Matching the step count instead (three epochs) reproduces the scout raw correlation
+almost exactly (0.0262 against 0.0260) and reaches \bmc{}~0.0095 on data the search never
+touched; \bmc{} then falls monotonically as steps increase (Figure~\ref{fig:steps}). The
+optimal training amount is therefore a fixed number of optimizer steps, not epochs,
+consistent with the continuous-time view in which stopping time sets the effective
+regularization \citep{ali2019continuous}. A squared-error network trained for eight epochs on
+the scale data over-trains the same way (\bmc{}~0.0027, benchmark correlation 0.23).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig5_steps.pdf}
+\caption{Wide correlation-loss MLP on scout data and on the disjoint scale data, plotted against
+training amount in optimizer steps (one unit = one scout epoch). Scale points are three-seed
+averages; scout points are single seeds. Matching the step count transfers the optimum to
+unseen eras.}
+\label{fig:steps}
+\end{figure}
+
+\subsection{The payout target}
+
+Since round 1343 Numerai pays on the 60-day Ender target \citep{numerai_scoring}. Re-scoring the
+saved out-of-fold predictions against \path{target_ender_60} and the
+\path{v53_lgbm_ender60} benchmark preserves the ranking and widens the gap
+(Table~\ref{tab:ender60}): the LightGBM baseline adds almost nothing beyond the 60-day
+benchmark, while the network trained only on the 20-day target still contributes 0.0064.
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+Model (scout data, scored on ender60) & corr & \bmc{} & \bmc{} last 200 & corr w/ benchmark \\
+\midrule
+Wide MLP, corr loss, 3 seeds & 0.0260 & 0.0068 & \textbf{0.0064} & 0.357 \\
+Narrow MLP, corr loss, lr 2e-3, 3 seeds & 0.0262 & 0.0065 & 0.0061 & 0.374 \\
+Narrow MLP, corr loss, lr 1e-3, 3 seeds & 0.0261 & 0.0062 & 0.0057 & 0.376 \\
+MLP, MSE, 8 epochs & 0.0244 & 0.0049 & 0.0046 & 0.366 \\
+MLP, MSE, 4 epochs & 0.0249 & 0.0030 & 0.0023 & 0.423 \\
+LightGBM baseline & 0.0277 & 0.0010 & 0.0002 & 0.518 \\
+\bottomrule
+\end{tabular}
+\caption{Out-of-fold predictions re-scored on the 60-day payout target against the 60-day
+LightGBM benchmark. Models were trained on the 20-day target.}
+\label{tab:ender60}
+\end{table}
 
 \begin{table}[t]
 \centering\small
@@ -281,9 +323,12 @@ view in which stopping time sets the effective regularization \citep{ali2019cont
 Model (3 seeds) & corr & \bmc{} & \bmc{} last 200 & corr w/ benchmark \\
 \midrule
 Wide, 6 epochs, scout data (reference) & 0.0260 & 0.0088 & 0.0089 & 0.336 \\
-Wide, 4 epochs, scale data & 0.0237 & 0.0074 & \textbf{0.0082} & 0.330 \\
-Narrow, 6 epochs, scale data & 0.0220 & 0.0068 & 0.0067 & 0.308 \\
-Wide, 6 epochs, scale data & 0.0206 & 0.0065 & 0.0056 & 0.283 \\
+\midrule
+Wide, 3 epochs (1.0$\times$ steps) & 0.0262 & 0.0083 & \textbf{0.0095} & 0.365 \\
+Wide, 4 epochs (1.33$\times$ steps) & 0.0237 & 0.0074 & 0.0082 & 0.330 \\
+Wide, 6 epochs (2.0$\times$ steps) & 0.0206 & 0.0065 & 0.0056 & 0.283 \\
+Narrow, 6 epochs (2.0$\times$ steps) & 0.0220 & 0.0068 & 0.0067 & 0.308 \\
+Wide, MSE, 8 epochs & 0.0164 & 0.0049 & 0.0027 & 0.233 \\
 \bottomrule
 \end{tabular}
 \caption{Confirmation on 613 eras disjoint from the search. The last 200 eras of the scale
@@ -312,8 +357,9 @@ training set grows, scale the epoch count down so the number of steps stays at t
 
 \paragraph{Limitations.} We used the \texttt{medium} feature set only; the 3,555-feature set did
 not fit in memory. Since Numerai's round 1343 the official \bmc{} uses the 60-day Ender target
-and a stake-weighted ensemble of benchmark models \citep{numerai_scoring}, so our 20-day,
-single-benchmark \bmc{} is a proxy for the payout metric. Finalists were averaged over three
+and a stake-weighted ensemble of benchmark models \citep{numerai_scoring}. We re-scored on the
+60-day target against the single 60-day LightGBM benchmark, but not against the stake-weighted
+ensemble. Finalists were averaged over three
 seeds, so differences below about 0.0003 should be read as ties. Thirty-five configurations
 were tried on the same folds; a deflated Sharpe ratio \citep{bailey2014deflated} would temper
 the best scout result, which is one reason we confirmed on disjoint eras. No live-tournament
@@ -324,8 +370,9 @@ results are included yet.
 On Numerai's 20-day Ender target the best neural network is not an exotic one. A plain
 three-layer MLP with a per-era correlation loss, trained briefly, doubles the LightGBM
 baseline's benchmark contribution. Architecture mattered less than the amount of training,
-which trades raw signal for uniqueness along a single curve, and that amount is best fixed in
-optimizer steps. Next steps follow directly from the literature: interpolating trained weights
+which trades raw signal for uniqueness along a single curve. That amount is a fixed number of
+optimizer steps: holding it fixed transferred the optimum to unseen eras, and the advantage
+over LightGBM grows on the 60-day payout target. Next steps follow directly from the literature: interpolating trained weights
 towards their initialization as a continuous training-amount dial \citep{ali2019continuous},
 penalizing correlation with the benchmark during training, training on the 60-day target that
 Numerai now pays on, and a quasi-Monte Carlo search over the learning-rate and step-count

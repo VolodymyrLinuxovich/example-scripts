@@ -70,10 +70,20 @@ Run & Configuration & corr & \bmc{} & last 200 & w/ bench. \\\midrule
 \path{r6_wide_lr2e3_ep5} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 5 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0257 & 0.0079 & 0.0078 & 0.348 \\
 \bottomrule\end{tabular}\end{center}
 
+\subsection*{Round 7 $\cdot$ literature ideas}
+\begin{center}\scriptsize\begin{tabular}{p{3.2cm}p{6.0cm}cccc}\toprule
+Run & Configuration & corr & \bmc{} & last 200 & w/ bench. \\\midrule
+\path{r7_bench_pen1} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0188 & 0.0103 & \textbf{0.0106} & 0.157 \\
+\path{r7_bench_pen03} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0216 & 0.0102 & 0.0104 & 0.217 \\
+\path{r7_bmc_loss} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 & 0.0248 & 0.0090 & 0.0090 & 0.307 \\
+\bottomrule\end{tabular}\end{center}
+
 \subsection*{Scale $\cdot$ unseen eras}
 \begin{center}\scriptsize\begin{tabular}{p{3.2cm}p{6.0cm}cccc}\toprule
 Run & Configuration & corr & \bmc{} & last 200 & w/ bench. \\\midrule
-\path{s1_wide_ep4_seeds3} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 4 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 $\cdot$ 3 seeds & 0.0237 & 0.0074 & \textbf{0.0082} & 0.330 \\
+\path{s1_wide_ep3_seeds3} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 3 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 $\cdot$ 3 seeds & 0.0262 & 0.0083 & \textbf{0.0095} & 0.365 \\
+\path{s1_wide_ep4_seeds3} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 4 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 $\cdot$ 3 seeds & 0.0237 & 0.0074 & 0.0082 & 0.330 \\
 \path{s1_narrow_ep6_seeds3} & MLP 256--128 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ 3 seeds & 0.0220 & 0.0068 & 0.0067 & 0.308 \\
 \path{s1_wide_ep6_seeds3} & MLP 1024--512--256 $\cdot$ corr loss $\cdot$ 6 ep $\cdot$ lr 0.002 $\cdot$ drop 0.2 $\cdot$ 3 seeds & 0.0206 & 0.0065 & 0.0056 & 0.283 \\
+\path{s1_wide_mse_ep8} & MLP 1024--512--256 $\cdot$ MSE $\cdot$ 8 ep $\cdot$ lr 0.001 $\cdot$ drop 0.2 & 0.0164 & 0.0049 & 0.0027 & 0.233 \\
 \bottomrule\end{tabular}\end{center}

@@ -138,9 +138,30 @@ def fig_cumulative():
     save(fig, "fig4_cumulative_bmc")
 
 
+def fig_steps():
+    """Scout vs scale data: BMC against training amount in optimizer steps (scout-epoch units)."""
+    scout = [(5, "r6_wide_lr2e3_ep5"), (6, "r5_wide_lr2e3_ep6")]
+    scale = [(6, "s1_wide_ep3_seeds3"), (8, "s1_wide_ep4_seeds3"), (12, "s1_wide_ep6_seeds3")]
+    fig, (a, b) = plt.subplots(1, 2, figsize=(9, 3.4))
+    for label, color, pts in [("Scout data (307 eras)", BLUE, scout), ("Scale data (613 unseen eras)", ORANGE, scale)]:
+        xs = [x for x, _ in pts]
+        for ax, key, field in [(a, "bmc_last_200_eras", "mean"), (b, "bmc", "avg_corr_with_benchmark")]:
+            ax.plot(xs, [metric(n, key, field) for _, n in pts], color=color, lw=2, marker="o", ms=6,
+                    markeredgecolor=SURFACE, markeredgewidth=2, label=label)
+    a.set_title("a. BMC, last 200 eras", loc="left", color=INK)
+    b.set_title("b. Correlation with benchmark", loc="left", color=INK)
+    for ax in (a, b):
+        ax.set_xlabel("Optimizer steps (scout-epoch equivalents)")
+        ax.set_xticks([5, 6, 8, 12])
+    a.legend(frameon=False, loc="lower left")
+    fig.tight_layout()
+    save(fig, "fig5_steps")
+
+
 if __name__ == "__main__":
     fig_architectures()
     fig_training_amount()
     fig_tradeoff()
     fig_cumulative()
+    fig_steps()
     print("wrote", sorted(p.name for p in OUT.glob("*.png")))
