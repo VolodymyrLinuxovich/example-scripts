@@ -10,6 +10,15 @@ import matplotlib.pyplot as plt
 HERE = Path(__file__).parent
 OUT = HERE / "plots"
 OUT.mkdir(exist_ok=True)
+PAPER_FIGS = HERE / "paper" / "figures"
+PAPER_FIGS.mkdir(parents=True, exist_ok=True)
+
+
+def save(fig, stem):
+    """PNG for the markdown write-up, vector PDF for the LaTeX paper."""
+    fig.savefig(OUT / f"{stem}.png", dpi=160)
+    fig.savefig(PAPER_FIGS / f"{stem}.pdf")
+    plt.close(fig)
 
 SURFACE, INK, INK2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
 BLUE, ORANGE, GRAY = "#2a78d6", "#eb6834", "#a3a29c"
@@ -48,9 +57,8 @@ def fig_architectures():
     ax.set_xlabel("BMC, last 200 eras (higher is better)")
     ax.grid(axis="y", visible=False)
     ax.set_xlim(0, max(metric(r[1]) for r in rows) * 1.18)
-    ax.set_title("Architecture comparison (downsampled scout data)", loc="left", color=INK)
     fig.tight_layout()
-    fig.savefig(OUT / "fig1_architectures.png", dpi=160)
+    save(fig, "fig1_architectures")
 
 
 def fig_training_amount():
@@ -75,10 +83,64 @@ def fig_training_amount():
         ax.set_xticks([5, 6, 8, 10, 12, 20])
     a.legend(frameon=False, loc="lower left")
     fig.tight_layout()
-    fig.savefig(OUT / "fig2_training_amount.png", dpi=160)
+    save(fig, "fig2_training_amount")
+
+
+def fig_tradeoff():
+    """All scout runs: correlation with the benchmark vs BMC, coloured by loss."""
+    fig, ax = plt.subplots(figsize=(6.2, 3.8))
+    groups = {"LightGBM": (GRAY, []), "MSE loss": (BLUE, []), "Correlation loss": (ORANGE, [])}
+    for f in sorted((HERE / "results").glob("*.json")):
+        if f.stem.startswith("s1"):
+            continue
+        r = json.loads(f.read_text())
+        model = r["model"]
+        key = "LightGBM" if model["type"] != "TorchNNRegressor" else (
+            "MSE loss" if model["params"].get("loss", "mse") == "mse" else "Correlation loss")
+        groups[key][1].append((r["metrics"]["bmc"]["avg_corr_with_benchmark"],
+                               r["metrics"]["bmc_last_200_eras"]["mean"]))
+    for label, (color, pts) in groups.items():
+        ax.scatter([p[0] for p in pts], [p[1] for p in pts], s=42, color=color,
+                   edgecolor=SURFACE, linewidth=1.5, label=label, zorder=3)
+    ax.set_xlabel("Correlation with benchmark predictions")
+    ax.set_ylabel("BMC, last 200 eras")
+    ax.legend(frameon=False, loc="lower right")
+    fig.tight_layout()
+    save(fig, "fig3_tradeoff")
+
+
+def fig_cumulative():
+    """Cumulative per-era BMC on the same 246 scout OOF eras."""
+    import sys
+    import pandas as pd
+    sys.path.insert(0, str(HERE.parents[2]))
+    from agents.code.metrics import numerai_metrics as nm
+
+    bench = pd.read_parquet(HERE.parents[2] / "v5.3/downsampled_full_benchmark_models.parquet",
+                            columns=["v53_lgbm_ender20"])
+    curves = [("LightGBM baseline", "r0_baseline_small_lgbm", GRAY),
+              ("MLP, MSE (round 1)", "r1_mlp_mse", BLUE),
+              ("Wide MLP, corr loss (final)", "r6_wide_lr2e3_ep6_seeds3", ORANGE)]
+    fig, ax = plt.subplots(figsize=(7.5, 3.4))
+    for label, name, color in curves:
+        p = pd.read_parquet(HERE / "predictions" / f"{name}.parquet",
+                            columns=["id", "era", "target", "prediction"]).set_index("id").join(bench, how="inner")
+        per_era = nm.per_era_bmc(p, ["prediction"], "v53_lgbm_ender20", "target", "era")["prediction"].sort_index()
+        eras = [int(e) for e in per_era.index]
+        cum = per_era.cumsum().to_numpy()
+        ax.plot(eras, cum, color=color, lw=2)
+        ax.annotate(label, (eras[-1], cum[-1]), xytext=(6, 0), textcoords="offset points",
+                    va="center", color=INK2, fontsize=9)
+    ax.set_xlabel("Era")
+    ax.set_ylabel("Cumulative BMC")
+    ax.set_xlim(right=ax.get_xlim()[1] + 230)
+    fig.tight_layout()
+    save(fig, "fig4_cumulative_bmc")
 
 
 if __name__ == "__main__":
     fig_architectures()
     fig_training_amount()
+    fig_tradeoff()
+    fig_cumulative()
     print("wrote", sorted(p.name for p in OUT.glob("*.png")))
